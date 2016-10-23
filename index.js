@@ -83,13 +83,27 @@ app.get('/atom/users/:userId/commonGames', function (req, res) {
 	//console.log(promises);
 
 	Promise.all(promises).then(function(jsons) {
-		console.log(jsons);
-	});
+		var output = {
+			users: {
+				user : []
+			}
+		};
+
+		var error = null;
+		jsons.forEach(json => {
+			if (json.users.user) {
+				json.users.user.forEach(ele => output.users.user.push(ele));
+			} else {
+				error = json
+			}
+		});
+		return error !== null ? toXml(error) : toXml(output);
+	}).then(xml => res.send(xml));
 	//console.log(friendIds);
 	///Promise.all(promises).then(all => console.log(all));
 	
-	buildFetchPromise(datapoint[0], userId, friendIds, authToken)
-		.then(json => toXml(json)).then(xml => res.send(xml));
+//	buildFetchPromise(datapoint[0], userId, friendIds, authToken)
+//		.then(json => toXml(json)).then(xml => res.send(xml));
 
 
   	//res.send('Hello World!' + userId + 'friendIds: ' + friendIds + "authToken: " + authToken );
