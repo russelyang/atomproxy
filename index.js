@@ -16,6 +16,30 @@ if (!String.prototype.format) {
     }
 }
 
+function toJson(xml) {
+	return new Promise(function(resolve, rejecct) {
+		var parseString = require('xml2js').parseString; 
+		parseString(xml, function(err, result) {
+			console.log(err);
+			console.log(result);
+			if (!err) {
+				resolve(result);
+			} else {
+				rejecct(err);
+			}
+		});
+	});
+}
+
+function toXml(json) {
+	return new Promise(function(resolve, rejecct) {
+		var xml2js = require('xml2js');
+		var builder = new xml2js.Builder({renderOpts: {pretty : false}});
+		var xml = builder.buildObject(json);
+		resolve(xml);
+	});	
+}
+
 var datapoint = ["https://integration.api4.origin.com"];
 
 app.get('/atom/users/:userId/commonGames', function (req, res) {
@@ -36,7 +60,7 @@ app.get('/atom/users/:userId/commonGames', function (req, res) {
 		})
 	.then(function(body) {
 		return body.text();
-	}).then(body => res.send(body));
+	}).then( xml => toJson(xml)).then(json => toXml(json)).then(xml => res.send(xml));
 
   	//res.send('Hello World!' + userId + 'friendIds: ' + friendIds + "authToken: " + authToken );
 });
