@@ -1,0 +1,13 @@
+BigFriends0000@gos.ea.com: Qat3st3r
+url: https://integration.www.origin.com/can/en-us/game-library/ogd/OFB-EAST:109550787/friends-who-play
+
+https://integration.api4.origin.com/atom/users/1000195797930/commonGames?friendIds=1000219733654,1000202552008,1000181999826,1000171986276,1000175322377
+https://integration.api4.origin.com/atom/users/1000195797930/commonGames?friendIds=1000201990905,1000182342515,1000214327589,1000273746662,1000182117855
+https://integration.api4.origin.com/atom/users/1000195797930/commonGames?friendIds=1000233578180,1000193711190,1000190332467,1000179140153,1000181579531
+https://integration.api4.origin.com/atom/users/1000195797930/commonGames?friendIds=1000221145436,1000201735351,1000182552266,1000264338747,1000216954499
+
+https://integration.api4.origin.com/atom/users/1000195797930/commonGames?friendIds=1000183530909,1000182384830,1000183596989,1000236785544,1000183350936 
+
+authtoken:QVQwOjEuMDozLjA6NjA6SXBUNkMwV3R4UkREbmpsck9JYzFZUlpxYnJhUHpOdmdXeTo5NzkzMDpuZmFvZw
+
+curl -H "authtoken:QVQwOjEuMDozLjA6NjA6SXBUNkMwV3R4UkREbmpsck9JYzFZUlpxYnJhUHpOdmdXeTo5NzkzMDpuZmFvZw" "https://integration.api4.origin.com/atom/users/1000195797930/commonGames?friendIds=1000183530909,1000182384830,1000183596989,1000236785544,1000183350936"
