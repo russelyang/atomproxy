@@ -2,6 +2,32 @@ var express = require('express');
 var app = express();
 var fetch = require('node-fetch');
 
+var cluster = require('cluster');
+var numCPUs = require('os').cpus.length;
+
+var https = require('https');
+var fs = require('fs');
+var privateKey  = fs.readFileSync('sslcert/key.pem', 'utf8');
+var certificate = fs.readFileSync('sslcert/cert.pem', 'utf8');
+var credentials = {key: privateKey, cert: certificate};
+
+var allowCrossDomain = function(req, res, next) {
+    res.header('access-control-allow-origin', '*');
+    res.header('access-control-allow-credentials', 'true');
+    res.header('access-control-allow-methods', 'GET,OPTIONS');
+    res.header('access-control-allow-headers', 'accept,authToken,X-Forwarded-For,X-Origin-Platform,locale,MultiplayerId,Origin-ClientIp,Content-Type,Origin');
+    // intercept OPTIONS method
+    if ('OPTIONS' == req.method) {
+      res.sendStatus(200);
+    }
+    else {
+      next();
+    }
+};
+
+
+app.use(allowCrossDomain);
+
 if (!String.prototype.format) {
     String.prototype.format = function() {
         var str = this.toString();
@@ -61,6 +87,8 @@ app.get('/atom/users/:userId/commonGames', function (req, res) {
 	var friendIds = req.query.friendIds.split(",");
 	var authToken = req.get("authToken");
 
+	res.set("content-type", "text/xml; charset=UTF-8");
+
 	var promises = [],
 		batch = 0;
 		fids = [];
@@ -70,10 +98,11 @@ app.get('/atom/users/:userId/commonGames', function (req, res) {
 			fids.push(friendIds[i]);
 		} 
 		if (fids.length == 5) {
+			console.log(datapoint[batch]);
 			var fp = buildFetchPromise(datapoint[batch], userId, fids, authToken);
 			promises.push(fp);
 			batch++;
-			if (batch == 3) {
+			if (batch == 4) {
 				batch = 0;
 			}
 			fids = [];
@@ -109,7 +138,9 @@ app.get('/atom/users/:userId/commonGames', function (req, res) {
   	//res.send('Hello World!' + userId + 'friendIds: ' + friendIds + "authToken: " + authToken );
 });
 
-app.listen(3000, function () {
+var httpsServer = https.createServer(credentials, app);
+
+httpsServer.listen(3000, function () {
   console.log('atom proxy app listening on port 3000!');
 });
 
