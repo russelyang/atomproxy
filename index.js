@@ -1,16 +1,13 @@
 var cluster = require('cluster');
-var numCPUs = require('os').cpus.length;
+var numCPUs = require('os').cpus().length / 2;
 
+/**
+force to single process to enable share the same copy of cache
+**/
 if (cluster.isMaster) {
-	for(var i=0; i<numCPUs; i++) {
+	for(var i=0; i<1; i++) {
 		cluster.fork();
 	}
-	cluster.on( 'online', function( worker ) {
-    console.log( 'Worker ' + worker.process.pid + ' is online.' );
-  });
-  cluster.on( 'exit', function( worker, code, signal ) {
-    console.log( 'worker ' + worker.process.pid + ' died.' );
-  });
 } else {
 	var express = require('express');
 	var app = express();
@@ -21,12 +18,17 @@ if (cluster.isMaster) {
 	var certificate = fs.readFileSync('sslcert/cert.pem', 'utf8');
 	var credentials = {key: privateKey, cert: certificate};
 
+	var friendCommonGamesCache = {};
+
+	var compression = require('compression');
+	var _ = require('underscore');
+
 	var allowCrossDomain = function(req, res, next) {
 	    res.header('access-control-allow-origin', '*');
 	    res.header('access-control-allow-credentials', 'true');
 	    res.header('access-control-allow-methods', 'GET,OPTIONS');
 	    res.header('access-control-allow-headers', 'accept,authToken,X-Forwarded-For,X-Origin-Platform,locale,MultiplayerId,Origin-ClientIp,Content-Type,Origin');
-	    // intercept OPTIONS method
+	    // intercept OPTIONS method, can enable browser cache
 	    if ('OPTIONS' == req.method) {
 	      res.sendStatus(200);
 	    }
@@ -35,9 +37,12 @@ if (cluster.isMaster) {
 	    }
 	};
 
-
 	app.use(allowCrossDomain);
+	app.use(compression());
 
+	/**
+	* provide C like sprintf to javascript script
+	**/
 	if (!String.prototype.format) {
 	    String.prototype.format = function() {
 	        var str = this.toString();
@@ -51,6 +56,10 @@ if (cluster.isMaster) {
 	    }
 	}
 
+	/**
+	* convert xml to a json object
+	* return a promise which can resolve as a json object
+	**/
 	function toJson(xml) {
 		return new Promise(function(resolve, rejecct) {
 			var parseString = require('xml2js').parseString; 
@@ -64,6 +73,10 @@ if (cluster.isMaster) {
 		});
 	}
 
+	/**
+	* convert json object to xml string
+	* return a promise can resolve as a xml string
+	**/
 	function toXml(json) {
 		return new Promise(function(resolve, rejecct) {
 			var xml2js = require('xml2js');
@@ -73,6 +86,9 @@ if (cluster.isMaster) {
 		});	
 	}
 
+	/**
+	* fetch the http request and return a promise can be resolved as a json object.
+	**/
 	function buildFetchPromise(datapoint, userId, friendIds, authToken) {
 		return fetch("{0}/atom/users/{1}/commonGames?friendIds={2}".format( 
 			datapoint, 
@@ -83,7 +99,7 @@ if (cluster.isMaster) {
 					"authToken" : authToken
 				}
 			}).then(function(body) {
-			return body.text();
+				return body.text();
 		}).then( xml => toJson(xml));
 	}
 
@@ -97,29 +113,47 @@ if (cluster.isMaster) {
 		var friendIds = req.query.friendIds.split(",");
 		var authToken = req.get("authToken");
 
+		if(friendCommonGamesCache[userId] == undefined) {
+			friendCommonGamesCache[userId] = {};	
+		}
+
+		var cachedFriendIds = Object.keys(friendCommonGamesCache[userId]);
+		
+		var requestFriendIds = _.difference(friendIds,cachedFriendIds);
+		var requestFromCacheFriendIds = _.intersection(friendIds, cachedFriendIds);
+
 		res.set("content-type", "text/xml; charset=UTF-8");
 
 		var promises = [],
-			batch = 0;
+			batchSize = 5,
+			batch = 0,
+			requestFriendIdsSet = [];
 			fids = [];
 
-		for(var i=0; i< friendIds.length; i++) {
-			if (fids.length < 5) {
-				fids.push(friendIds[i]);
-			} 
-			if (fids.length == 5) {
-				console.log(datapoint[batch]);
-				var fp = buildFetchPromise(datapoint[batch], userId, fids, authToken);
-				promises.push(fp);
-				batch++;
-				if (batch == 4) {
-					batch = 0;
-				}
-				fids = [];
-			}
+		console.log("load from server = " + requestFriendIds.length);
+		while(requestFriendIds.length > 0) 
+		{
+			requestFriendIdsSet.push(requestFriendIds.splice(0, batchSize));
 		}
+		requestFriendIdsSet.forEach(ids => {
+			promises.push(buildFetchPromise(datapoint[batch++], userId, ids, authToken));
+			if (batch == 4) {
+				batch =0;
+			}
+		});
 
-		//console.log(promises);
+		console.log("load from cache = " + requestFromCacheFriendIds.length);
+		requestFromCacheFriendIds.forEach(friendId => {
+			promises.push(new Promise(function(resolve) {
+				var output = {
+					users: {
+						user : []
+					}
+				};
+				output.users.user.push(friendCommonGamesCache[userId][friendId]);
+				resolve(output);
+			}));
+		});
 
 		Promise.all(promises).then(function(jsons) {
 			var output = {
@@ -127,25 +161,24 @@ if (cluster.isMaster) {
 					user : []
 				}
 			};
-
 			var error = null;
 			jsons.forEach(json => {
-				if (json.users.user) {
+				if (json && json.users && json.users.user) {
 					json.users.user.forEach(ele => output.users.user.push(ele));
 				} else {
 					error = json
 				}
 			});
+			if (!error) {
+				output.users.user.forEach(user => {
+					friendCommonGamesCache[userId][user.userId[0]] = user;
+				});
+				//res.set("cache-control", "max-age=86400");
+			}
 			return error !== null ? toXml(error) : toXml(output);
-		}).then(xml => res.send(xml));
-		//console.log(friendIds);
-		///Promise.all(promises).then(all => console.log(all));
-		
-	//	buildFetchPromise(datapoint[0], userId, friendIds, authToken)
-	//		.then(json => toXml(json)).then(xml => res.send(xml));
-
-
-	  	//res.send('Hello World!' + userId + 'friendIds: ' + friendIds + "authToken: " + authToken );
+		}).then(xml => {
+			res.send(xml);
+		});
 	});
 
 	var httpsServer = https.createServer(credentials, app);
@@ -154,5 +187,3 @@ if (cluster.isMaster) {
 	  console.log('atom proxy app listening on port 3000!');
 	});	
 }
-
-
