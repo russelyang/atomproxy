@@ -181,6 +181,49 @@ if (cluster.isMaster) {
 		});
 	});
 
+	app.get("/atom/users/:userId/commonGame" , function(request, response) {
+		var userId = request.params.userId,
+			masterTitleId = request.query.masterTitleId,
+			multiPlayerId = request.query.multiPlayerId,
+			authToken = request.get("authToken");	
+
+		var cache = friendCommonGamesCache[userId], 
+			friendIds = Object.keys(cache);
+
+		var commonGameFriends  = friendIds.filter(function(friendId) {
+			var games = cache[friendId].games;
+			if (_.isObject(games[0])) {
+				var game = games[0].game;	
+				return game && game.filter(g => g.masterTitleId.indexOf(masterTitleId) > -1 &&
+					g.multiPlayerId.indexOf(multiPlayerId) > -1).length > 0;
+			}
+		});
+
+		var output = {
+			"userId" : userId,
+			"masterTitleId" : masterTitleId,
+			"multiPlayerId" : multiPlayerId,
+			"commonGameFriends" : commonGameFriends
+		}
+
+
+		response.set("content-type", "application/json; charset=UTF-8");
+		response.send(output);
+	})
+
+	app.post('/flush', function(request, response) {
+		fs.writeFileSync("friendCommonGamesCache.json", JSON.stringify(friendCommonGamesCache));
+		response.send("OK");
+	});
+
+
+	app.post('/load', function(request, response) {
+		if(fs.existsSync('friendCommonGamesCache.json')) {
+			friendCommonGamesCache = JSON.parse(fs.readFileSync("friendCommonGamesCache.json"));
+		}
+		response.send("OK");
+	});	
+
 	var httpsServer = https.createServer(credentials, app);
 
 	httpsServer.listen(3000, function () {
