@@ -1,3 +1,4 @@
+
 var cluster = require('cluster');
 var numCPUs = require('os').cpus().length / 2;
 
@@ -14,8 +15,8 @@ if (cluster.isMaster) {
 	var fetch = require('node-fetch');
 	var https = require('https');
 	var fs = require('fs');
-	var privateKey  = fs.readFileSync('sslcert/key.pem', 'utf8');
-	var certificate = fs.readFileSync('sslcert/cert.pem', 'utf8');
+	var privateKey  = fs.readFileSync('sslcert/localapp.key', 'utf8');
+	var certificate = fs.readFileSync('sslcert/localapp.crt', 'utf8');
 	var credentials = {key: privateKey, cert: certificate};
 
 	var friendCommonGamesCache = {};
@@ -27,7 +28,7 @@ if (cluster.isMaster) {
 	    res.header('access-control-allow-origin', '*');
 	    res.header('access-control-allow-credentials', 'true');
 	    res.header('access-control-allow-methods', 'GET,OPTIONS');
-	    res.header('access-control-allow-headers', 'accept,authToken,X-Forwarded-For,X-Origin-Platform,locale,MultiplayerId,Origin-ClientIp,Content-Type,Origin');
+	    res.header('access-control-allow-headers', 'accept,authToken,X-Forwarded-For,X-Origin-Platform,locale,MultiplayerId,Origin-ClientIp,Content-Type,Origin,Authorization');
 	    // intercept OPTIONS method, can enable browser cache
 	    if ('OPTIONS' == req.method) {
 	      res.sendStatus(200);
@@ -100,7 +101,9 @@ if (cluster.isMaster) {
 				}
 			}).then(function(body) {
 				return body.text();
-		}).then( xml => toJson(xml));
+		}).then( function(xml) {
+			return toJson(xml);
+		});
 	}
 
 	var datapoint = ["https://integration.api1.origin.com",
@@ -135,25 +138,25 @@ if (cluster.isMaster) {
 		{
 			requestFriendIdsSet.push(requestFriendIds.splice(0, batchSize));
 		}
-		requestFriendIdsSet.forEach(ids => {
-			promises.push(buildFetchPromise(datapoint[batch++], userId, ids, authToken));
-			if (batch == 4) {
-				batch =0;
-			}
-		});
+		requestFriendIdsSet.forEach(function (ids) {
+            promises.push(buildFetchPromise(datapoint[batch++], userId, ids, authToken));
+            if (batch == 4) {
+                batch = 0;
+            }
+        });
 
 		console.log("load from cache = " + requestFromCacheFriendIds.length);
-		requestFromCacheFriendIds.forEach(friendId => {
-			promises.push(new Promise(function(resolve) {
-				var output = {
-					users: {
-						user : []
-					}
-				};
-				output.users.user.push(friendCommonGamesCache[userId][friendId]);
-				resolve(output);
-			}));
-		});
+		requestFromCacheFriendIds.forEach(function (friendId) {
+            promises.push(new Promise(function (resolve) {
+                var output = {
+                    users: {
+                        user: []
+                    }
+                };
+                output.users.user.push(friendCommonGamesCache[userId][friendId]);
+                resolve(output);
+            }));
+        });
 
 		Promise.all(promises).then(function(jsons) {
 			var output = {
@@ -162,23 +165,25 @@ if (cluster.isMaster) {
 				}
 			};
 			var error = null;
-			jsons.forEach(json => {
-				if (json && json.users && json.users.user) {
-					json.users.user.forEach(ele => output.users.user.push(ele));
-				} else {
-					error = json
-				}
-			});
+			jsons.forEach(function (json) {
+                if (json && json.users && json.users.user) {
+                    json.users.user.forEach(function (ele) {
+                        return output.users.user.push(ele);
+                    });
+                } else {
+                    error = json
+                }
+            });
 			if (!error) {
-				output.users.user.forEach(user => {
-					friendCommonGamesCache[userId][user.userId[0]] = user;
-				});
+				output.users.user.forEach(function (user) {
+                    friendCommonGamesCache[userId][user.userId[0]] = user;
+                });
 				//res.set("cache-control", "max-age=86400");
 			}
 			return error !== null ? toXml(error) : toXml(output);
-		}).then(xml => {
-			res.send(xml);
-		});
+		}).then(function (xml) {
+            res.send(xml);
+        });
 	});
 
 	app.get("/atom/users/:userId/commonGame" , function(request, response) {
@@ -194,8 +199,10 @@ if (cluster.isMaster) {
 			var games = cache[friendId].games;
 			if (_.isObject(games[0])) {
 				var game = games[0].game;	
-				return game && game.filter(g => g.masterTitleId.indexOf(masterTitleId) > -1 &&
-					g.multiPlayerId.indexOf(multiPlayerId) > -1).length > 0;
+				return game && game.filter(function (g) {
+                        return g.masterTitleId.indexOf(masterTitleId) > -1 &&
+                            g.multiPlayerId.indexOf(multiPlayerId) > -1;
+                    }).length > 0;
 			}
 		});
 
@@ -222,7 +229,15 @@ if (cluster.isMaster) {
 			friendCommonGamesCache = JSON.parse(fs.readFileSync("friendCommonGamesCache.json"));
 		}
 		response.send("OK");
-	});	
+	});
+
+	app.get("/v1/recommendations/:userId/friends",
+		function(request, response) {
+            response.set("content-type", "application/json; charset=UTF-8");
+			var recResponse = require("./recFriends.response");
+			response.send(recResponse);
+		}
+	);
 
 	var httpsServer = https.createServer(credentials, app);
 
