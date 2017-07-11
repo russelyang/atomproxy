@@ -27,7 +27,7 @@ if (cluster.isMaster) {
 	var allowCrossDomain = function(req, res, next) {
 	    res.header('access-control-allow-origin', '*');
 	    res.header('access-control-allow-credentials', 'true');
-	    res.header('access-control-allow-methods', 'GET,OPTIONS');
+	    res.header('access-control-allow-methods', 'GET,OPTIONS,DELETE');
 	    res.header('access-control-allow-headers', 'accept,authToken,X-Forwarded-For,X-Origin-Platform,locale,MultiplayerId,Origin-ClientIp,Content-Type,Origin,Authorization');
 	    // intercept OPTIONS method, can enable browser cache
 	    if ('OPTIONS' == req.method) {
@@ -234,10 +234,14 @@ if (cluster.isMaster) {
 	app.get("/v1/recommendations/:userId/friends",
 		function(request, response) {
             response.set("content-type", "application/json; charset=UTF-8");
-			var recResponse = require("./recFriends.response");
+			var recResponse = require("./recFriends.response.int");
 			response.send(recResponse);
 		}
 	);
+
+	app.delete('/v1/recommendations/:userId/friends/:disableUserId', function(request, response) {
+        response.send("OK");
+    });
 
 	var httpsServer = https.createServer(credentials, app);
 
